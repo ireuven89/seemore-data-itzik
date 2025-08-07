@@ -68,6 +68,9 @@ export class MongodbService {
     return crypto.createHash('sha256').update(data).digest('hex');
   }
 
+  /**
+   * can be replaced with a different collection - of sync metadata
+   */
   async getMetadataStats(): Promise<{
     totalTables: number;
     lastSyncTime: Date | null;

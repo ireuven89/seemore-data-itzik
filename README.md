@@ -61,19 +61,6 @@ $ npm run test:cov
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
 
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
 
 # NestJS Snowflake Metadata Sync
 
@@ -197,8 +184,3 @@ src/
 - Ensure your Snowflake user/role has access to all databases and schemas you wish to sync.
 - Incremental sync is enabled by default (only new/changed tables are fetched after the first run).
 - For advanced usage or troubleshooting, see logs in the application output.
-
----
-
-## License
-MIT
