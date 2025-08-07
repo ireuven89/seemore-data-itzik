@@ -33,6 +33,7 @@ export class SnowflakeService {
       'SNOWFLAKE_ACCOUNT',
       'SNOWFLAKE_USERNAME',
       'SNOWFLAKE_PASSWORD',
+        'SNOWFLAKE_WAREHOUSE',
     ];
     const missing = requiredVars.filter((v) => !process.env[v]);
     if (missing.length > 0) {
