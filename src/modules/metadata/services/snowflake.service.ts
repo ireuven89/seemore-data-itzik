@@ -21,9 +21,6 @@ export class SnowflakeService {
   private connection: snowflake.Connection;
   private queryCount = 0;
 
-  constructor() {
-  }
-
   private createConnection(): snowflake.Connection {
     return snowflake.createConnection(DatabaseConfig.getSnowflakeConfig());
   }
@@ -34,6 +31,7 @@ export class SnowflakeService {
       'SNOWFLAKE_USERNAME',
       'SNOWFLAKE_PASSWORD',
       'SNOWFLAKE_WAREHOUSE',
+      'SNOWFLAKE_ROLE'
     ];
     const missing = requiredVars.filter((v) => !process.env[v]);
     if (missing.length > 0) {
@@ -57,7 +55,6 @@ export class SnowflakeService {
   }
 
   async disconnect(): Promise<void> {
-
     return new Promise((resolve) => {
       if (this.connection) {
         this.connection.destroy(() => {
@@ -105,48 +102,77 @@ export class SnowflakeService {
   }
 
   private async getAllTablesInAccount(lastSyncTime?: Date): Promise<Array<{database: string, schema: string, table: string}>> {
-    let query = `
-      SELECT 
-        TABLE_CATALOG as database,
-        TABLE_SCHEMA as schema,
-        TABLE_NAME as table,
-        LAST_ALTERED
-      FROM INFORMATION_SCHEMA.TABLES 
-      WHERE TABLE_SCHEMA != 'INFORMATION_SCHEMA'
-      AND TABLE_CATALOG != 'SNOWFLAKE'
-    `;
-    if (lastSyncTime) {
-      const iso = lastSyncTime.toISOString().replace('T', ' ').replace('Z', '');
-      query += ` AND LAST_ALTERED > '${iso}'`;
-    }
-    query += ` ORDER BY TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME`;
+    const tables: Array<{database: string, schema: string, table: string}> = [];
+
     try {
-      const rows = await this.executeQuery(query);
-      return rows.map(row => ({
-        database: row.DATABASE,
-        schema: row.SCHEMA,
-        table: row.TABLE
-      }));
+      const databases = await this.executeQuery(`SHOW DATABASES`);
+
+      for (const db of databases) {
+        if (this.isSystemDatabase(db.name)) continue;
+
+        const schemas = await this.getSchemasForDatabase(db.name);
+
+        for (const schema of schemas) {
+          if (this.isSystemSchema(schema.name)) continue;
+
+          const schemaTables = await this.getTablesForSchema(db.name, schema.name);
+
+          for (const table of schemaTables) {
+            //if existing table change detection is needed - for modified tables - remove or comment this line
+            if (this.shouldSkipTable(table, lastSyncTime)) continue;
+
+            tables.push({
+              database: db.name,
+              schema: schema.name,
+              table: table.name || table.NAME
+            });
+          }
+        }
+      }
+
+      this.logger.log(`Found ${tables.length} tables across all databases`);
+      return tables;
+
     } catch (error) {
-      this.logger.error('Failed to get tables from INFORMATION_SCHEMA, falling back to SHOW commands', error);
-      return await this.getAllTablesWithShowCommands();
+      this.logger.error('Failed to get tables using SHOW commands', error);
+      throw error
     }
   }
 
-  private async getAllTablesWithShowCommands(): Promise<Array<{database: string, schema: string, table: string}>> {
-    this.logger.warn('Using SHOW commands as fallback (less efficient)');
-    const databases = await this.getDatabases();
-    const allTables: Array<{database: string, schema: string, table: string}> = [];
-    for (const database of databases) {
-      const schemas = await this.getSchemas(database);
-      for (const schema of schemas) {
-        const tables = await this.getTables(database, schema);
-        for (const table of tables) {
-          allTables.push({ database, schema, table });
-        }
-      }
+
+  private isSystemDatabase(dbName: string): boolean {
+    return ['SNOWFLAKE', 'INFORMATION_SCHEMA'].includes(dbName?.toUpperCase());
+  }
+
+  private isSystemSchema(schemaName: string): boolean {
+    return schemaName?.toUpperCase() === 'INFORMATION_SCHEMA';
+  }
+
+  private shouldSkipTable(table: any, lastSyncTime?: Date): boolean {
+    if (!lastSyncTime) return false;
+
+    const createdTime = new Date(table.created_on || table.CREATED_ON || Date.now());
+
+    // Only skip tables created before last sync
+    return createdTime <= lastSyncTime;
+  }
+
+  private async getSchemasForDatabase(databaseName: string): Promise<any[]> {
+    try {
+      return await this.executeQuery(`SHOW SCHEMAS IN DATABASE "${databaseName}"`);
+    } catch (err) {
+      this.logger.warn(`Could not get schemas from ${databaseName}:`, err.message);
+      return [];
     }
-    return allTables;
+  }
+
+  private async getTablesForSchema(databaseName: string, schemaName: string): Promise<any[]> {
+    try {
+      return await this.executeQuery(`SHOW TABLES IN SCHEMA "${databaseName}"."${schemaName}"`);
+    } catch (err) {
+      this.logger.warn(`Could not get tables from ${databaseName}.${schemaName}:`, err.message);
+      return [];
+    }
   }
 
   private async getAllColumnsForDatabase(database: string, tables: Array<{database: string, schema: string, table: string}>): Promise<SnowflakeTable[]> {
@@ -172,7 +198,7 @@ export class SnowflakeService {
       return this.groupColumnsIntoTables(database, rows);
     } catch (error) {
       this.logger.error(`Failed to get columns for database ${database}, falling back to individual queries`, error);
-      return await this.getTablesWithIndividualColumnQueries(database, tables);
+      return await this.getTablesWithIndividualColumnQueries(tables);
     }
   }
 
@@ -210,7 +236,7 @@ export class SnowflakeService {
     return grouped;
   }
 
-  private async getTablesWithIndividualColumnQueries(database: string, tables: Array<{database: string, schema: string, table: string}>): Promise<SnowflakeTable[]> {
+  private async getTablesWithIndividualColumnQueries(tables: Array<{database: string, schema: string, table: string}>): Promise<SnowflakeTable[]> {
     const result: SnowflakeTable[] = [];
     for (const tableInfo of tables) {
       const columns = await this.getTableColumns(tableInfo.database, tableInfo.schema, tableInfo.table);
@@ -245,32 +271,6 @@ export class SnowflakeService {
     });
   }
 
-  private async getDatabases(): Promise<string[]> {
-    const query = `SHOW DATABASES`;
-    const rows = await this.executeQuery(query);
-    return rows.map(row => row.name).filter(name => 
-      !['INFORMATION_SCHEMA', 'SNOWFLAKE'].includes(name.toUpperCase())
-    );
-  }
-
-  private async getSchemas(database: string): Promise<string[]> {
-    const query = `SHOW SCHEMAS IN DATABASE "${database}"`;
-    const rows = await this.executeQuery(query);
-    return rows.map(row => row.name).filter(name => 
-      name.toUpperCase() !== 'INFORMATION_SCHEMA'
-    );
-  }
-
-  private async getTables(database: string, schema: string): Promise<string[]> {
-    const query = `SHOW TABLES IN SCHEMA "${database}"."${schema}"`;
-    try {
-      const rows = await this.executeQuery(query);
-      return rows.map(row => row.name);
-    } catch (error) {
-      this.logger.warn(`Could not fetch tables for ${database}.${schema}`, error.message);
-      return [];
-    }
-  }
 
   private async getTableColumns(database: string, schema: string, table: string): Promise<any[]> {
     const query = `

@@ -64,7 +64,7 @@ When you're ready to deploy your NestJS application to production, there are som
 
 # NestJS Snowflake Metadata Sync
 
-A modular NestJS service for syncing Snowflake metadata (databases, schemas, tables, columns) to MongoDB, with efficient incremental updates and best practices.
+A modular NestJS service for syncing Snowflake metadata (databases, schemas, tables, columns) to MongoDB, with efficient incremental updates
 
 ---
 
