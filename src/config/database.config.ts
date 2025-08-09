@@ -8,8 +8,6 @@ export class DatabaseConfig {
       account: process.env.SNOWFLAKE_ACCOUNT ?? '',
       username: process.env.SNOWFLAKE_USERNAME ?? '',
       password: process.env.SNOWFLAKE_PASSWORD ?? '',
-      warehouse: process.env.SNOWFLAKE_WAREHOUSE ?? '',
-      role: process.env.SNOWFLAKE_ROLE ?? '',
     };
   }
 }

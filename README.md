@@ -50,8 +50,6 @@ $ npm run start:prod
 # unit tests
 $ npm run test
 
-# e2e tests
-$ npm run test:e2e
 
 # test coverage
 $ npm run test:cov
@@ -64,11 +62,10 @@ When you're ready to deploy your NestJS application to production, there are som
 
 # NestJS Snowflake Metadata Sync
 
-A modular NestJS service for syncing Snowflake metadata (databases, schemas, tables, columns) to MongoDB, with efficient incremental updates
-
----
+A NestJS service for syncing Snowflake metadata (databases, schemas, tables, columns) to MongoDB with incremental updates and comprehensive testing.
 
 ## Features
+
 - Connects to Snowflake and discovers all databases, schemas, and tables
 - Retrieves detailed column information for each table
 - Stores metadata in MongoDB with efficient upsert operations
@@ -80,15 +77,11 @@ A modular NestJS service for syncing Snowflake metadata (databases, schemas, tab
 - TypeScript with proper typing
 - MongoDB indexes for efficient querying
 
----
-
 ## Installation
 
 ```bash
 npm install
 ```
-
----
 
 ## Environment Variables
 
@@ -98,18 +91,14 @@ Create a `.env` file in the project root:
 # MongoDB Configuration
 MONGODB_URI=mongodb://localhost:27017/snowflake-metadata
 
-# Snowflake Configuration
+# Snowflake Configuration (only account-level access needed for metadata discovery)
 SNOWFLAKE_ACCOUNT=your-account
 SNOWFLAKE_USERNAME=your-username
 SNOWFLAKE_PASSWORD=your-password
-SNOWFLAKE_WAREHOUSE=your-warehouse
-SNOWFLAKE_ROLE=your-role
 
 # Application
 PORT=3000
 ```
-
----
 
 ## Usage
 
@@ -121,8 +110,6 @@ PORT=3000
    ```bash
    curl -X POST http://localhost:3000/api/metadata/sync
    ```
-
----
 
 ## API
 
@@ -144,7 +131,45 @@ Triggers a sync from Snowflake to MongoDB. Returns a summary of the operation.
 }
 ```
 
----
+### GET `/api/metadata/tables/grouped`
+Returns all tables grouped by database and schema. This is useful when you only have account details and want to see the complete structure.
+
+#### Example Response
+```json
+{
+  "MY_DATABASE": {
+    "PUBLIC": {
+      "tables": [
+        {
+          "database": "MY_DATABASE",
+          "schema": "PUBLIC",
+          "table": "USERS",
+          "columns": [
+            {
+              "name": "ID",
+              "type": "NUMBER",
+              "nullable": false,
+              "defaultValue": null,
+              "comment": "User ID"
+            }
+          ]
+        }
+      ],
+      "tableCount": 1
+    },
+    "ANALYTICS": {
+      "tables": [],
+      "tableCount": 0
+    }
+  },
+  "ANOTHER_DB": {
+    "PUBLIC": {
+      "tables": [],
+      "tableCount": 0
+    }
+  }
+}
+```
 
 ## Project Structure
 
@@ -161,14 +186,13 @@ src/
       metadata.service.ts
       schemas/
         metadata.schema.ts
+        sync.schema.ts
       services/
         snowflake.service.ts
         mongodb.service.ts
       dto/
         sync-response.dto.ts
 ```
-
----
 
 ## Testing
 
@@ -178,9 +202,9 @@ src/
   npm test
   ```
 
----
-
 ## Notes
+
 - Ensure your Snowflake user/role has access to all databases and schemas you wish to sync.
 - Incremental sync is enabled by default (only new/changed tables are fetched after the first run).
+- Sync statistics are automatically saved to MongoDB for tracking and monitoring.
 - For advanced usage or troubleshooting, see logs in the application output.
